@@ -28,7 +28,7 @@ resource "azurerm_container_app_environment" "this" {
   name                       = "cae-${var.name}"
   resource_group_name        = var.resource_group_name
   location                   = var.location
-  logs_destination           = var.logs_enabled ? "log-analytics" : "azure-monitor"
+  logs_destination           = var.logs_enabled ? "log-analytics" : null
   log_analytics_workspace_id = var.logs_enabled ? azurerm_log_analytics_workspace.this[0].id : null
   tags                       = var.tags
 
@@ -40,7 +40,6 @@ resource "azurerm_container_app_environment" "this" {
 }
 
 # Identidad asignada por el usuario: existe, y tiene permisos, antes de crear la app.
-# Con una identidad del sistema la primera revision fallaria al leer los secretos.
 resource "azurerm_user_assigned_identity" "app" {
   name                = "id-${var.name}"
   resource_group_name = var.resource_group_name
@@ -60,6 +59,13 @@ resource "time_sleep" "rbac_propagation" {
   create_duration = var.rbac_propagation_wait
 }
 
+data "azurerm_key_vault_secret" "secrets" {
+  for_each     = var.secret_ids
+  name         = each.key
+  key_vault_id = var.key_vault_id
+  depends_on   = [time_sleep.rbac_propagation]
+}
+
 resource "azurerm_container_app" "this" {
   name                         = "ca-${var.name}"
   resource_group_name          = var.resource_group_name
@@ -75,11 +81,10 @@ resource "azurerm_container_app" "this" {
   }
 
   dynamic "secret" {
-    for_each = var.secret_ids
+    for_each = data.azurerm_key_vault_secret.secrets
     content {
-      name                = secret.key
-      key_vault_secret_id = secret.value
-      identity            = azurerm_user_assigned_identity.app.id
+      name  = secret.key
+      value = secret.value.value
     }
   }
 
