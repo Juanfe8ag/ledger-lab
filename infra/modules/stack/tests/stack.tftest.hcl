@@ -148,8 +148,3 @@ run "el_tope_de_replicas_protege_el_credito" {
 
   expect_failures = [var.max_replicas]
 }
-mock_data "azurerm_key_vault_secret" {
-    defaults = {
-      value = "valor-simulado"
-    }
-  }
